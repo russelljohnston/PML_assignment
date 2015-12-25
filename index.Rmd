@@ -36,6 +36,7 @@ library(gbm)
 library(survival)
 library(splines)
 library(parallel)
+library(doParallel)
 
 ```
 
@@ -56,27 +57,27 @@ The training and testing data were respectively  downloaded from:
 When reading in both datasets we standardise the data by setting any missing values  or `div/0`  to `NA` e.g.
 
 ```{r eval=FALSE}
-train = read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+data = read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
 ```
 
 
-### Training Sample Selection
+###  Sample Selection
 
 The training set contains a total of 19622 observations and 160 variables. Not all of these are predictor variables and we firstly remove columns: `X` (row number), `user_name`, `raw_timestamp_part_1`, `raw_timestamp_part_2` and `cvtd_timestamp`:
 
 ```{r eval=FALSE}
-train <- train[-c(1:6)]
+data <- train[-c(1:6)]
 ```
 
 Just for conveneince we move the outcome variable `classe` to the first column:
 ```{r eval=FALSE}
-train <- train[c(154,1:153)]
+data <- data[c(154,1:153)]
 ```
 
 We found that there are predictor columns with a significant number of missing data. Figure 1 below shows a bar plot of the percentage of NA counts for each variable in the training set:
 
 ```{r eval=FALSE}
-na_count <-100*(sapply(train, function(y) sum(length(which(is.na(y)))))/nrow(train))
+na_count <-100*(sapply(data, function(y) sum(length(which(is.na(y)))))/nrow(data))
 barplot(as.matrix(t(na_count)), las=3,cex.names=0.4,ylab="% of 'NA' counts")
 ```
 
@@ -94,7 +95,7 @@ min(na_count[na_count>0])
 As such these variables would  have minimal contribution to the training analysis and so we remove these from our analysis:
 
 ```{r eval=FALSE}
-train <- train[,(na_count==0)]
+data <- data[,(na_count==0)]
 ```
 
 This results in the removal of 100 further variables from our anaylsis giving a total of 53 predictors:
@@ -112,13 +113,19 @@ This results in the removal of 100 further variables from our anaylsis giving a 
 [51] "accel_forearm_z"      "magnet_forearm_x"     "magnet_forearm_y"     "magnet_forearm_z"  
 ```
 
-We apply the same cuts to the  testing data set as above - this ensures certain fitting models used in the later analysis throw no errors due to missing values:
+
+### Creating Training and Testing Data sets
+
+We can now split the main `data` set into  training and testing samples by selecting 60% for the training and 40% for
+the testing sample:
 
 ```{r eval=FALSE}
-test <- test[-c(1:6)]
-test <- test[c(154,1:153)]
-test <- test[,(na_count==0)]
+train <- createDataPartition(y=data$classe,p=.60,list=F)
+training <- data[train,]
+testing  <- data[-train,]
 ```
+This will allow us to perform cross validation and estimate the out-of-samlple error. With this partition we have a total of 11776 observations for the `training` sample and 7846 in the `testing` sample.
+
 
 ### Pre processing with PCA and Cross Validation
 
@@ -126,7 +133,7 @@ test <- test[,(na_count==0)]
 Since this is quite a high dimensional dataset we explore by how much the predictor variables are correlated.  We do this by applying the `cor` function and isolate variables that have a correlation coefficient > 0.8:
 
 ```{r eval=FALSE}
-corrTrain <- abs(cor(train[,-1]))
+corrTrain <- abs(cor(training[,-1]))
 diag(corrTrain) <- 0
 which(corrTrain>0.8,arr.ind=T)
 ```
@@ -160,106 +167,218 @@ magnet_arm_z      27  26
 magnet_arm_y      26  27
 accel_dumbbell_x  35  29
 accel_dumbbell_z  37  30
-gyros_dumbbell_z  34  32
-gyros_forearm_z   47  32
-gyros_dumbbell_x  32  34
-gyros_forearm_z   47  34
 pitch_dumbbell    29  35
 yaw_dumbbell      30  37
-gyros_forearm_z   47  46
-gyros_dumbbell_x  32  47
-gyros_dumbbell_z  34  47
-gyros_forearm_y   46  47
 
 ```
 
 We can see we have a number of  predictors that are highly correlated which would make principal component analysis (PCA) a useful addition to the analysis as it will reduce the number of predictors and help optimise the compuational cost. We will use the `caret` package to perform the training analysis and pass through pre processing options via the `trainControl` function. In terms of PCA we set  `preProcOptions="pca"` which, as default, retains 95% variance. 
-This is equivalent to 26 components:
+This is equivalent to 27 components:
 
 ```{r eval=FALSE}
- preProcess(train, method = "pca", thresh = 0.95)$numComp
+ preProcess(training, method = "pca", thresh = 0.95)$numComp
 ```
-
-#### Cross Validation
+```
+[1] 27
+```
+#### k-Fold Cross Validation
 
 Implementing k-fold cross-validation will take the training sample and  randomly partition it into k equal sized subsamples. Of the k subsamples, a single subsample is retained as the validation data for testing the model, and the remaining k − 1 subsamples are used as training data. The cross-validation process is then repeated k times (the folds), with each of the k subsamples used exactly once as the validation data. The number of folds one chooses seem to range from 3 to 10. In this analysis we chose n=8. 
 
 Finally we can combine the PCA and cross validation options within the  `trainControl` function such that:
 
 ```{r eval=FALSE}
-tr<-trainControl(method="cv", number=8, preProcOptions="pca")
+tr<-trainControl(method="cv", number=5, preProcOptions="pca")
 ```
 
 ## Training Analysis
 
+To help speed up the computations we envoke parallel processing prior to making our training model:
+```{r eval=FALSE}
 
+cl <- makeCluster(detectCores() - 1)
+registerDoParallel(cl)
+```
 
+We examine three different appraoches: random forrest `rf`, generalised boosted regresssion models `gbm` and support vector machines with radial basis function kernel  `svmRadial`. After training each model look apply it to our `testing` dataset and examine the resulting  `confusionMatrix`  to observe their respective accuracies.
 
 ```{r eval=FALSE}
 # Random Forrest
-rfFit <-train(train$classe ~., method="rf", data=train, trControl=tr, verbose=FALSE)
-rfPred=predict(rfFit,test)
-print(rfPred)
+rfFit <-train(training$classe ~., method="rf", data=training, trControl=tr, verbose=FALSE)
+rfPred=predict(rfFit,testing)
+rfConfMat = confusionMatrix(testing$classe,rfPred)
 ```
 
 ```
-[1] B A B A A E D B A A B C B A E E A B B B
-Levels: A B C D E
+Confusion Matrix and Statistics
+
+          Reference
+Prediction    A    B    C    D    E
+         A 2230    1    0    0    1
+         B    4 1513    1    0    0
+         C    0    4 1364    0    0
+         D    0    0    5 1281    0
+         E    0    0    0    5 1437
+
+Overall Statistics
+                                          
+               Accuracy : 0.9973          
+                 95% CI : (0.9959, 0.9983)
+    No Information Rate : 0.2847          
+    P-Value [Acc > NIR] : < 2.2e-16       
+                                          
+                  Kappa : 0.9966          
+ Mcnemar's Test P-Value : NA              
+
+Statistics by Class:
+
+                     Class: A Class: B Class: C Class: D Class: E
+Sensitivity            0.9982   0.9967   0.9956   0.9961   0.9993
+Specificity            0.9996   0.9992   0.9994   0.9992   0.9992
+Pos Pred Value         0.9991   0.9967   0.9971   0.9961   0.9965
+Neg Pred Value         0.9993   0.9992   0.9991   0.9992   0.9998
+Prevalence             0.2847   0.1935   0.1746   0.1639   0.1833
+Detection Rate         0.2842   0.1928   0.1738   0.1633   0.1832
+Detection Prevalence   0.2845   0.1935   0.1744   0.1639   0.1838
+Balanced Accuracy      0.9989   0.9980   0.9975   0.9977   0.9993
 ```
+
 ```{r eval=FALSE}
 # Generalized Boosted Regression Models
 gbmFit  <- train(train$classe ~., method="gbm", data=train,trControl=tr,verbose=FALSE)
-gbmPred=predict(gbmFit,test)
-print(gbmPred)
+gbmPred=predict(gbmFit,testing)
+gbmConfMat = confusionMatrix(testing$classe,gbmPred)
 ```
 
 ```
-[1] B A B A A E D B A A B C B A E E A B B B
-Levels: A B C D E
+Confusion Matrix and Statistics
+
+          Reference
+Prediction    A    B    C    D    E
+         A 2222    9    0    1    0
+         B   21 1493    3    1    0
+         C    0   12 1353    1    2
+         D    0    3   13 1266    4
+         E    2    8    3   10 1419
+
+Overall Statistics
+                                          
+               Accuracy : 0.9881          
+                 95% CI : (0.9855, 0.9904)
+    No Information Rate : 0.2861          
+    P-Value [Acc > NIR] : < 2.2e-16       
+                                          
+                  Kappa : 0.985           
+ Mcnemar's Test P-Value : NA              
+
+Statistics by Class:
+
+                     Class: A Class: B Class: C Class: D Class: E
+Sensitivity            0.9898   0.9790   0.9862   0.9898   0.9958
+Specificity            0.9982   0.9960   0.9977   0.9970   0.9964
+Pos Pred Value         0.9955   0.9835   0.9890   0.9844   0.9840
+Neg Pred Value         0.9959   0.9949   0.9971   0.9980   0.9991
+Prevalence             0.2861   0.1944   0.1749   0.1630   0.1816
+Detection Rate         0.2832   0.1903   0.1724   0.1614   0.1809
+Detection Prevalence   0.2845   0.1935   0.1744   0.1639   0.1838
+Balanced Accuracy      0.9940   0.9875   0.9919   0.9934   0.9961
+
 ```
+
+
 ```{r eval=FALSE}
 # Support Vector Machines with Radial Basis Function Kernel
 svmFit  <- train(train$classe ~., method="svmRadial", data=train,trControl=tr,verbose=FALSE)
-svmPred=predict(svmFit,test)
-print(svmPred)
-```
-```
- Loading required package: kernlab
- Attaching package: ‘kernlab’
- The following object is masked from ‘package:ggplot2’:
-    alpha
+svmPred=predict(svmFit,testing)
+svmConfMat = confusionMatrix(testing$classe,svmPred)
 ```
 
+```
+Confusion Matrix and Statistics
+
+          Reference
+Prediction    A    B    C    D    E
+         A 2183   13   32    1    3
+         B  116 1360   41    0    1
+         C    5   71 1266   21    5
+         D    2    6  142 1134    2
+         E    1    9   42   52 1338
+
+Overall Statistics
+                                         
+               Accuracy : 0.928          
+                 95% CI : (0.922, 0.9336)
+    No Information Rate : 0.294          
+    P-Value [Acc > NIR] : < 2.2e-16      
+                                         
+                  Kappa : 0.9088         
+ Mcnemar's Test P-Value : < 2.2e-16      
+
+Statistics by Class:
+
+                     Class: A Class: B Class: C Class: D Class: E
+Sensitivity            0.9463   0.9321   0.8313   0.9387   0.9918
+Specificity            0.9912   0.9753   0.9839   0.9771   0.9840
+Pos Pred Value         0.9780   0.8959   0.9254   0.8818   0.9279
+Neg Pred Value         0.9779   0.9844   0.9603   0.9887   0.9983
+Prevalence             0.2940   0.1860   0.1941   0.1540   0.1719
+Detection Rate         0.2782   0.1733   0.1614   0.1445   0.1705
+Detection Prevalence   0.2845   0.1935   0.1744   0.1639   0.1838
+Balanced Accuracy      0.9687   0.9537   0.9076   0.9579   0.9879
+> 
+
+```
+```{r eval=FALSE}
+stopCluster(cl)
+```
+
+Comparing the three estimators we find the random forrest performs the best
+shows a out of sample error of (1 - accuracy for predictions made against the cross-validation set) = 0.26%. 
+
+Method |Accuracy |Out-of-sample Error (%)
+------------- | ------------- | -------------
+`rf` | 0.9973 | 0.26
+`gbm` | 0.9881 | 1.19
+`svmRadial` | 0.928 | 7.2
+
+
+## Results of Testing on pml-testing Data
+
+After finding the random forrest to be the most accurate of the three methods, we apply this to the final
+sample of 20 observertions and make predictionst to be submittied to Coursera. We apply the same column selection to that the original training data to ensure the fitting model used in the later analysis throw no errors due to missing values:
+
+```{r eval=FALSE}
+T20 <- T20[-c(1:6)]
+T20 <- T20[c(154,1:153)]
+T20 <- T20[,(na_count==0)]
+```
+
+Now the predicitons:
+
+```{r eval=FALSE}
+predict(rfFit,T20)
+```
 ```
  [1] B A B A A E D B A A B C B A E E A B B B
 Levels: A B C D E
 ```
 
+To submit the final predictions of the sample of 20, we use the code provided:
 
 ```{r eval=FALSE}
-max(rfFit$results$Accuracy)
-```
-
-```
-[1] 0.9984712
-```
-
-```{r eval=FALSE}
-max(gbmFit$results$Accuracy)
-```
-
-```
-[1] 0.9883294
-```
-
-```{r eval=FALSE}
-max(svmFit$results$Accuracy))
-```
-
-```
-[1] 0.9411886
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
 ```
 
 
 
+## Conclusions
 
+We have built a training model to using data from the Weight Lifting Exercise Dataset, which gathered data from data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. 
+
+We split the data set into  training (60%) and testing (40%) samples and trained the data on three different machine leanring algorithms, random forrest `rf`, generalised boosted regresssion models `gbm` and support vector machines with radial basis function kernel  `svmRadial`. We found the random forrest to perform the best and applied this to the final test data of 20 samples and found that it performed well, finding 100% correct classifcation. This is perhaps not too surpriseing since the training model was shown to have ~99.7% accuracy. Since this data is trained to only 6 participants, it possibly is not representative  of a broader range of the population e.g. younger vs older, fitness level etc...  
