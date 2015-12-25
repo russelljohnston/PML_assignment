@@ -1,0 +1,246 @@
+---
+title: "Practical Machine Learning - Prediction Assignment"
+author: "Russell Johnston"
+date: "24 December 2015"
+output: html_document
+---
+<style type="text/css">
+
+body, td {
+   font-size: 12px;
+}
+code.r{
+  font-size: 10px;
+}
+pre {
+  font-size: 8px
+}
+</style>
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: [http://groupware.les.inf.puc-rio.br/har](http://groupware.les.inf.puc-rio.br/har).
+
+## The Goal
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+## Libraries and Settings
+
+We use the following libraries to perfom our analysis.
+
+```{r}
+library(caret)
+library(randomForest)
+library(gbm)
+library(survival)
+library(splines)
+library(parallel)
+library(doParallel)
+
+```
+
+We set the seed to be 
+```{r eval=FALSE}
+set.seed(222)
+```
+
+
+## The Data
+
+The training and testing data were respectively  downloaded from:
+
+- [https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+
+- [https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+When reading in both datasets we standardise the data by setting any missing values  or `div/0`  to `NA` e.g.
+
+```{r}
+data = read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+```
+
+
+###  Sample Selection
+
+The training set contains a total of 19622 observations and 160 variables. Not all of these are predictor variables and we firstly remove columns: `X` (row number), `user_name`, `raw_timestamp_part_1`, `raw_timestamp_part_2` and `cvtd_timestamp`:
+
+```{r}
+data <- data[-c(1:6)]
+```
+
+Just for conveneince we move the outcome variable `classe` to the first column:
+```{r}
+data <- data[c(154,1:153)]
+```
+
+We found that there are predictor columns with a significant number of missing data. Figure 1 below shows a bar plot of the percentage of NA counts for each variable in the training set:
+
+```{r}
+na_count <-100*(sapply(data, function(y) sum(length(which(is.na(y)))))/nrow(data))
+
+```
+
+<figure>
+<img   style="margin:30px 0px 0px 0px;" src="barplot.png" width="500px"/>
+<figcaption style="font-size:10px; margin:0px 0px 20px 0px"> Figure 1.Bar plot showing the percentage of NA counts for each variable in the training set. </figcaption>
+</figure>
+As we can see all variables with missing data have at least 97.93% without recorded values. That is,  these variables have at most, 406 recorded observations out of 19,622.
+
+
+```{r}
+min(na_count[na_count>0])
+```
+As such these variables would  have minimal contribution to the training analysis and so we remove these from our analysis:
+
+```{r}
+data  <- data[,(na_count==0)]
+```
+
+This results in the removal of 100 further variables from our anaylsis giving a total of 53 predictors:
+
+```{r}
+names(data)
+```  
+
+
+
+### Creating Training and Testing Data sets
+
+We can now split the main `data` set into  training and testing samples by selecting 60% for the training and 40% for
+the testing sample:
+
+```{r}
+train <- createDataPartition(y=data$classe,p=.60,list=F)
+training <- data[train,]
+testing  <- data[-train,]
+```
+This will allow us to perform cross validation and estimate the out-of-samlple error. With this partition we have a total of 11776 observations for the `training` sample and 7846 in the `testing` sample.
+
+
+### Pre processing with PCA and Cross Validation
+
+#### Principle Component Analysis (PCA)
+Since this is quite a high dimensional dataset we explore by how much the predictor variables are correlated.  We do this by applying the `cor` function and isolate variables that have a correlation coefficient > 0.8:
+
+```{r}
+corrTrain <- abs(cor(training[,-1]))
+diag(corrTrain) <- 0
+which(corrTrain>0.8,arr.ind=T)
+```
+
+
+We can see we have a number of  predictors that are highly correlated which would make principal component analysis (PCA) a useful addition to the analysis as it will reduce the number of predictors and help optimise the compuational cost. We will use the `caret` package to perform the training analysis and pass through pre processing options via the `trainControl` function. In terms of PCA we set  `preProcOptions="pca"` which, as default, retains 95% variance. 
+This is equivalent to 25 components:
+
+```{r}
+ preProcess(training, method = "pca", thresh = 0.95)$numComp
+```
+
+#### k-Fold Cross Validation
+
+Implementing k-fold cross-validation will take the training sample and  randomly partition it into k equal sized subsamples. Of the k subsamples, a single subsample is retained as the validation data for testing the model, and the remaining k − 1 subsamples are used as training data. The cross-validation process is then repeated k times (the folds), with each of the k subsamples used exactly once as the validation data. The number of folds one chooses seem to range from 3 to 10. In this analysis we chose n=8. 
+
+Finally we can combine the PCA and cross validation options within the  `trainControl` function such that:
+
+```{r}
+tr<-trainControl(method="cv", number=5, preProcOptions="pca",savePredictions=TRUE)
+```
+
+
+
+## Training Analysis
+
+To help speed up the computations we envoke parallel processing prior to making our training model:
+```{r}
+cl <- makeCluster(detectCores() - 1)
+registerDoParallel(cl)
+```
+
+
+We examine three different appraoches: random forrest `rf`, generalised boosted regresssion models `gbm` and support vector machines with radial basis function kernel  `svmRadial`. After training each model look apply it to our `testing` dataset and examine the resulting  `confusionMatrix`  to observe their respective accuracies.
+
+
+
+```{r rf}
+# Random Forrest
+rfFit <-train(training$classe ~., method="rf", data=training, trControl=tr, verbose=FALSE)
+rfPred=predict(rfFit,testing)
+confusionMatrix(testing$classe,rfPred)
+```
+
+
+
+```{r gbm}
+# Generalized Boosted Regression Models
+gbmFit  <- train(training$classe ~., method="gbm", data=training,trControl=tr,verbose=FALSE)
+gbmPred=predict(gbmFit,testing)
+confusionMatrix(testing$classe,gbmPred)
+```
+
+
+
+```{r svm}
+# Support Vector Machines with Radial Basis Function Kernel
+svmFit  <- train(training$classe ~., method="svmRadial", data=training,trControl=tr,verbose=FALSE)
+svmPred=predict(svmFit,testing)
+confusionMatrix(testing$classe,svmPred)
+```
+
+
+```{r}
+stopCluster(cl)
+```
+
+
+Comparing the three estimators we find the random forrest performs the best
+shows a out of sample error of (1 - accuracy for predictions made against the cross-validation set) = 0.26%. 
+
+Method |Accuracy |Out-of-sample Error (%)
+------------- | ------------- | -------------
+`rf` | 0.9973 | 0.26
+`gbm` | 0.9881 | 1.19
+`svmRadial` | 0.928 | 7.2
+
+
+## Results of Testing on pml-testing Data
+
+After finding the random forrest to be the most accurate of the three methods, we apply this to the final
+sample of 20 observertions and make predictionst to be submittied to Coursera. We apply the same column selection to that the original training data to ensure the fitting model used in the later analysis throw no errors due to missing values:
+
+```{r}
+T20 = read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+T20 <- T20[-c(1:6)]
+T20 <- T20[c(154,1:153)]
+T20 <- T20[,(na_count==0)]
+```
+
+Now the predicitons:
+
+```{r}
+rfTpred<-predict(rfFit,T20)
+```
+
+
+To submit the final predictions of the sample of 20, we use the code provided:
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(rfTpred)
+```
+
+
+
+
+## Conclusions
+
+We have built a training model to using data from the Weight Lifting Exercise Dataset, which gathered data from data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. 
+
+We split the data set into  training (60%) and testing (40%) samples and trained the data on three different machine leanring algorithms, random forrest `rf`, generalised boosted regresssion models `gbm` and support vector machines with radial basis function kernel  `svmRadial`. We found the random forrest to perform the best and applied this to the final test data of 20 samples and found that it performed well, finding 100% correct classifcation. This is perhaps not too surpriseing since the training model was shown to have ~99.7% accuracy. Since this data is trained to only 6 participants, it possibly is not representative  of a broader range of the population e.g. younger vs older, fitness level etc...  
