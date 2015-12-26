@@ -80,13 +80,13 @@ pre {
   font-size: 8px
 }
 </style>
-<div id="introduction" class="section level2">
-<h2>Introduction</h2>
-<p>Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <a href="http://groupware.les.inf.puc-rio.br/har"><a href="http://groupware.les.inf.puc-rio.br/har" class="uri">http://groupware.les.inf.puc-rio.br/har</a></a>.</p>
+<div id="the-assignment" class="section level2">
+<h2>The Assignment</h2>
+<p>Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These types of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <a href="http://groupware.les.inf.puc-rio.br/har"><a href="http://groupware.les.inf.puc-rio.br/har" class="uri">http://groupware.les.inf.puc-rio.br/har</a></a>.</p>
 </div>
 <div id="the-goal" class="section level2">
 <h2>The Goal</h2>
-<p>The goal of your project is to predict the manner in which they did the exercise. This is the “classe” variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.</p>
+<p>The goal of this project is to predict the manner in which they did the exercise. The 6 test subjects performed one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). This corresponds to the “classe” variable in the training set. We were allowed to use any of the other variables to predict with. We were requried to create a report describing how we built our model, cross validated, what we think the expected out of sample error is, and why we made the choices you did. Finally, we use our prediction model to predict 20 different test cases.</p>
 </div>
 <div id="libraries-and-settings" class="section level2">
 <h2>Libraries and Settings</h2>
@@ -136,7 +136,7 @@ library(doParallel)</code></pre>
 <pre class="r"><code>data = read.csv(&quot;pml-training.csv&quot;, na.strings=c(&quot;NA&quot;,&quot;#DIV/0!&quot;,&quot;&quot;))</code></pre>
 <div id="sample-selection" class="section level3">
 <h3>Sample Selection</h3>
-<p>The training set contains a total of 19622 observations and 160 variables. Not all of these are predictor variables and we firstly remove columns: <code>X</code> (row number), <code>user_name</code>, <code>raw_timestamp_part_1</code>, <code>raw_timestamp_part_2</code> and <code>cvtd_timestamp</code>:</p>
+<p>The training set contains a total of 19622 observations and 160 variables. Not all of these are predictor variables and so we firstly remove columns: <code>X</code> (row number), <code>user_name</code>, <code>raw_timestamp_part_1</code>, <code>raw_timestamp_part_2</code> and <code>cvtd_timestamp</code>:</p>
 <pre class="r"><code>data &lt;- data[-c(1:6)]</code></pre>
 <p>Just for conveneince we move the outcome variable <code>classe</code> to the first column:</p>
 <pre class="r"><code>data &lt;- data[c(154,1:153)]</code></pre>
@@ -148,7 +148,7 @@ library(doParallel)</code></pre>
 Figure 1.Bar plot showing the percentage of NA counts for each variable in the training set.
 </figcaption>
 </figure>
-<p>As we can see all variables with missing data have at least 97.93% without recorded values. That is, these variables have at most, 406 recorded observations out of 19,622.</p>
+<p>As we can see all variables with missing data have at least 97.93% without recorded values. That is, these variables have at most, 406 recorded observations out of a possible 19,622.</p>
 <pre class="r"><code>min(na_count[na_count&gt;0])</code></pre>
 <pre><code>## [1] 97.93089</code></pre>
 <p>As such these variables would have minimal contribution to the training analysis and so we remove these from our analysis:</p>
@@ -176,7 +176,7 @@ Figure 1.Bar plot showing the percentage of NA counts for each variable in the t
 </div>
 <div id="creating-training-and-testing-data-sets" class="section level3">
 <h3>Creating Training and Testing Data sets</h3>
-<p>We can now split the main <code>data</code> set into training and testing samples by selecting 60% for the training and 40% for the testing sample:</p>
+<p>We can now split the main <code>data</code> set into training and testing samples using ratio of 60% and 40% respectively:</p>
 <pre class="r"><code>train &lt;- createDataPartition(y=data$classe,p=.60,list=F)
 training &lt;- data[train,]
 testing  &lt;- data[-train,]</code></pre>
@@ -219,24 +219,15 @@ which(corrTrain&gt;0.8,arr.ind=T)</code></pre>
 ## magnet_arm_y      26  27
 ## accel_dumbbell_x  35  29
 ## accel_dumbbell_z  37  30
-## gyros_dumbbell_z  34  32
-## gyros_forearm_z   47  32
-## gyros_dumbbell_x  32  34
-## gyros_forearm_z   47  34
 ## pitch_dumbbell    29  35
-## yaw_dumbbell      30  37
-## gyros_forearm_z   47  46
-## gyros_dumbbell_x  32  47
-## gyros_dumbbell_z  34  47
-## gyros_forearm_y   46  47</code></pre>
+## yaw_dumbbell      30  37</code></pre>
 <p>We can see we have a number of predictors that are highly correlated which would make principal component analysis (PCA) a useful addition to the analysis as it will reduce the number of predictors and help optimise the compuational cost. We will use the <code>caret</code> package to perform the training analysis and pass through pre processing options via the <code>trainControl</code> function. In terms of PCA we set <code>preProcOptions=&quot;pca&quot;</code> which, as default, retains 95% variance. This is equivalent to 25 components:</p>
 <pre class="r"><code> preProcess(training, method = &quot;pca&quot;, thresh = 0.95)$numComp</code></pre>
-<pre><code>## [1] 25</code></pre>
+<pre><code>## [1] 27</code></pre>
 </div>
 <div id="k-fold-cross-validation" class="section level4">
 <h4> k-Fold Cross Validation</h4>
-<p>Implementing k-fold cross-validation will take the training sample and randomly partition it into k equal sized subsamples. Of the k subsamples, a single subsample is retained as the validation data for testing the model, and the remaining k − 1 subsamples are used as training data. The cross-validation process is then repeated k times (the folds), with each of the k subsamples used exactly once as the validation data. The number of folds one chooses seem to range from 3 to 10. In this analysis we chose n=8.</p>
-<p>Finally we can combine the PCA and cross validation options within the <code>trainControl</code> function such that:</p>
+<p>Implementing k-fold cross-validation will take the training sample and randomly partition it into k equal sized subsamples. Of the k subsamples, a single subsample is retained as the validation data for testing the model, and the remaining k − 1 subsamples are used as training data. The cross-validation process is then repeated k times (the folds), with each of the k subsamples used exactly once as the validation data. The number of folds one chooses seem to range from 3 to 10. In this analysis we chose n=5. Finally we can combine the PCA and cross validation options within the <code>trainControl</code> function such that:</p>
 <pre class="r"><code>tr&lt;-trainControl(method=&quot;cv&quot;, number=5, preProcOptions=&quot;pca&quot;,savePredictions=TRUE)</code></pre>
 </div>
 </div>
@@ -246,78 +237,34 @@ which(corrTrain&gt;0.8,arr.ind=T)</code></pre>
 <p>To help speed up the computations we envoke parallel processing prior to making our training model:</p>
 <pre class="r"><code>cl &lt;- makeCluster(detectCores() - 1)
 registerDoParallel(cl)</code></pre>
-<p>We examine three different appraoches: random forrest <code>rf</code>, generalised boosted regresssion models <code>gbm</code> and support vector machines with radial basis function kernel <code>svmRadial</code>. After training each model look apply it to our <code>testing</code> dataset and examine the resulting <code>confusionMatrix</code> to observe their respective accuracies.</p>
-<pre class="r"><code># Random Forrest
+<div id="insample-accuracy" class="section level3">
+<h3>Insample Accuracy</h3>
+<p>We examine three different appraoches: random forest <code>rf</code>, generalised boosted regresssion models <code>gbm</code> and support vector machines with radial basis function kernel <code>svmRadial</code>. After training each model we can look at the resulting <code>confusionMatrix</code> to observe their respective in-sample accuracies.</p>
+<pre class="r"><code># Random forest
 rfFit &lt;-train(training$classe ~., method=&quot;rf&quot;, data=training, trControl=tr, verbose=FALSE)
-rfPred=predict(rfFit,testing)
-confusionMatrix(testing$classe,rfPred)</code></pre>
-<pre><code>## Confusion Matrix and Statistics
-## 
-##           Reference
+rfPredTrain=predict(rfFit,training)
+confusionMatrix(training$classe,rfPredTrain)$table</code></pre>
+<pre><code>##           Reference
 ## Prediction    A    B    C    D    E
-##          A 2232    0    0    0    0
-##          B    6 1509    2    1    0
-##          C    0    9 1359    0    0
-##          D    0    0    9 1276    1
-##          E    0    0    0    6 1436
-## 
-## Overall Statistics
-##                                          
-##                Accuracy : 0.9957         
-##                  95% CI : (0.9939, 0.997)
-##     No Information Rate : 0.2852         
-##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16      
-##                                          
-##                   Kappa : 0.9945         
-##  Mcnemar's Test P-Value : NA             
-## 
-## Statistics by Class:
-## 
-##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            0.9973   0.9941   0.9920   0.9945   0.9993
-## Specificity            1.0000   0.9986   0.9986   0.9985   0.9991
-## Pos Pred Value         1.0000   0.9941   0.9934   0.9922   0.9958
-## Neg Pred Value         0.9989   0.9986   0.9983   0.9989   0.9998
-## Prevalence             0.2852   0.1935   0.1746   0.1635   0.1832
-## Detection Rate         0.2845   0.1923   0.1732   0.1626   0.1830
-## Detection Prevalence   0.2845   0.1935   0.1744   0.1639   0.1838
-## Balanced Accuracy      0.9987   0.9963   0.9953   0.9965   0.9992</code></pre>
+##          A 3348    0    0    0    0
+##          B    0 2279    0    0    0
+##          C    0    0 2054    0    0
+##          D    0    0    0 1930    0
+##          E    0    0    0    0 2165</code></pre>
+<pre class="r"><code>rfAccTrain = confusionMatrix(training$classe,rfPredTrain)$overall[[1]]</code></pre>
 <pre class="r"><code># Generalized Boosted Regression Models
 gbmFit  &lt;- train(training$classe ~., method=&quot;gbm&quot;, data=training,trControl=tr,verbose=FALSE)</code></pre>
 <pre><code>## Loading required package: plyr</code></pre>
-<pre class="r"><code>gbmPred=predict(gbmFit,testing)
-confusionMatrix(testing$classe,gbmPred)</code></pre>
-<pre><code>## Confusion Matrix and Statistics
-## 
-##           Reference
+<pre class="r"><code>gbmPredTrain=predict(gbmFit,training)
+confusionMatrix(training$classe,gbmPredTrain)$table</code></pre>
+<pre><code>##           Reference
 ## Prediction    A    B    C    D    E
-##          A 2221   11    0    0    0
-##          B   16 1485   13    4    0
-##          C    0   11 1355    1    1
-##          D    0    4   19 1261    2
-##          E    2    7    5   17 1411
-## 
-## Overall Statistics
-##                                           
-##                Accuracy : 0.9856          
-##                  95% CI : (0.9827, 0.9881)
-##     No Information Rate : 0.2854          
-##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
-##                                           
-##                   Kappa : 0.9818          
-##  Mcnemar's Test P-Value : NA              
-## 
-## Statistics by Class:
-## 
-##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            0.9920   0.9783   0.9734   0.9829   0.9979
-## Specificity            0.9980   0.9948   0.9980   0.9962   0.9952
-## Pos Pred Value         0.9951   0.9783   0.9905   0.9806   0.9785
-## Neg Pred Value         0.9968   0.9948   0.9943   0.9966   0.9995
-## Prevalence             0.2854   0.1935   0.1774   0.1635   0.1802
-## Detection Rate         0.2831   0.1893   0.1727   0.1607   0.1798
-## Detection Prevalence   0.2845   0.1935   0.1744   0.1639   0.1838
-## Balanced Accuracy      0.9950   0.9865   0.9857   0.9895   0.9965</code></pre>
+##          A 3344    4    0    0    0
+##          B   13 2257    9    0    0
+##          C    0   13 2037    2    2
+##          D    0    3   15 1912    0
+##          E    0    4    0    7 2154</code></pre>
+<pre class="r"><code>gbmAccTrain = confusionMatrix(training$classe,gbmPredTrain)$overall[[1]]</code></pre>
 <pre class="r"><code># Support Vector Machines with Radial Basis Function Kernel
 svmFit  &lt;- train(training$classe ~., method=&quot;svmRadial&quot;, data=training,trControl=tr,verbose=FALSE)</code></pre>
 <pre><code>## Loading required package: kernlab
@@ -327,77 +274,99 @@ svmFit  &lt;- train(training$classe ~., method=&quot;svmRadial&quot;, data=train
 ## The following object is masked from 'package:ggplot2':
 ## 
 ##     alpha</code></pre>
-<pre class="r"><code>svmPred=predict(svmFit,testing)
-confusionMatrix(testing$classe,svmPred)</code></pre>
-<pre><code>## Confusion Matrix and Statistics
-## 
-##           Reference
+<pre class="r"><code>svmPredTrain=predict(svmFit,training)
+confusionMatrix(training$classe,svmPredTrain)$table</code></pre>
+<pre><code>##           Reference
 ## Prediction    A    B    C    D    E
-##          A 2198    8   23    2    1
-##          B  122 1342   48    2    4
-##          C    4   56 1272   27    9
-##          D    6    6  160 1110    4
-##          E    4   16   51   49 1322
-## 
-## Overall Statistics
-##                                           
-##                Accuracy : 0.9233          
-##                  95% CI : (0.9172, 0.9291)
-##     No Information Rate : 0.2975          
-##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
-##                                           
-##                   Kappa : 0.9028          
-##  Mcnemar's Test P-Value : &lt; 2.2e-16       
-## 
-## Statistics by Class:
-## 
-##                      Class: A Class: B Class: C Class: D Class: E
-## Sensitivity            0.9417   0.9398   0.8185   0.9328   0.9866
-## Specificity            0.9938   0.9726   0.9847   0.9736   0.9816
-## Pos Pred Value         0.9848   0.8841   0.9298   0.8631   0.9168
-## Neg Pred Value         0.9758   0.9864   0.9565   0.9878   0.9972
-## Prevalence             0.2975   0.1820   0.1981   0.1517   0.1708
-## Detection Rate         0.2801   0.1710   0.1621   0.1415   0.1685
-## Detection Prevalence   0.2845   0.1935   0.1744   0.1639   0.1838
-## Balanced Accuracy      0.9678   0.9562   0.9016   0.9532   0.9841</code></pre>
-<pre class="r"><code>stopCluster(cl)</code></pre>
-<p>Comparing the three estimators we find the random forrest performs the best shows a out of sample error of (1 - accuracy for predictions made against the cross-validation set) = 0.26%.</p>
+##          A 3294    9   42    0    3
+##          B  146 2081   50    1    1
+##          C    6   96 1910   40    2
+##          D    4    4  208 1713    1
+##          E    1   17   51   70 2026</code></pre>
+<pre class="r"><code>svmAccTrain = confusionMatrix(training$classe,svmPredTrain)$overall[[1]]</code></pre>
+<p>From the output grids above we can see that the random forest approach performs the best showing a (perhaps unrelasitic) accuracy of unity. The respective in-sample accuracies are summarised in Table 1 below.</p>
+</div>
+<div id="out-of-sample-accuracy" class="section level3">
+<h3>Out-of-sample accuracy</h3>
+<p>We can now look at the out-of-sample accuracy by applying the three prediction models to our <code>testing</code> (40%) sample:</p>
+<pre class="r"><code>rfPredTest=predict(rfFit,testing)
+confusionMatrix(testing$classe,rfPredTest)$table</code></pre>
+<pre><code>##           Reference
+## Prediction    A    B    C    D    E
+##          A 2231    0    0    0    1
+##          B    4 1513    1    0    0
+##          C    0    2 1366    0    0
+##          D    0    0    5 1280    1
+##          E    0    0    0    4 1438</code></pre>
+<pre class="r"><code>rfAccTest = confusionMatrix(testing$classe,rfPredTest)$overall[[1]]</code></pre>
+<pre class="r"><code>gbmPredTest=predict(gbmFit,testing)
+confusionMatrix(testing$classe,gbmPredTest)$table</code></pre>
+<pre><code>##           Reference
+## Prediction    A    B    C    D    E
+##          A 2225    6    0    1    0
+##          B   14 1488   16    0    0
+##          C    0   14 1345    8    1
+##          D    1    4   16 1264    1
+##          E    1    4    5   12 1420</code></pre>
+<pre class="r"><code>gbmAccTest = confusionMatrix(testing$classe,gbmPredTest)$overall[[1]]</code></pre>
+<pre class="r"><code>svmPredTest=predict(svmFit,testing)
+confusionMatrix(testing$classe,svmPredTest)$table</code></pre>
+<pre><code>##           Reference
+## Prediction    A    B    C    D    E
+##          A 2176   19   35    0    2
+##          B  130 1343   45    0    0
+##          C    0   59 1263   42    4
+##          D    3    3  156 1123    1
+##          E    2   15   46   58 1321</code></pre>
+<pre class="r"><code>svmAccTest = confusionMatrix(testing$classe,svmPredTest)$overall[[1]]</code></pre>
+<p>Comparing the three estimators we find the random forest is the best performer with an out of sample error of 0.22 %.</p>
+<div id="table-1" class="section level4">
+<h4>Table 1</h4>
 <table>
 <thead>
 <tr class="header">
 <th align="left">Method</th>
-<th align="left">Accuracy</th>
+<th align="left">In-sample Accuracy</th>
+<th align="left">Out-of-sample Accuracy</th>
 <th align="left">Out-of-sample Error (%)</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
 <td align="left"><code>rf</code></td>
-<td align="left">0.9973</td>
-<td align="left">0.26</td>
+<td align="left">1</td>
+<td align="left">0.9977058</td>
+<td align="left">0.2294163</td>
 </tr>
 <tr class="even">
 <td align="left"><code>gbm</code></td>
-<td align="left">0.9881</td>
-<td align="left">1.19</td>
+<td align="left">0.9938859</td>
+<td align="left">0.9867448</td>
+<td align="left">1.3255162</td>
 </tr>
 <tr class="odd">
 <td align="left"><code>svmRadial</code></td>
-<td align="left">0.928</td>
-<td align="left">7.2</td>
+<td align="left">0.9361413</td>
+<td align="left">0.9209788</td>
+<td align="left">7.9021157</td>
 </tr>
 </tbody>
 </table>
 </div>
+</div>
+</div>
 <div id="results-of-testing-on-pml-testing-data" class="section level2">
 <h2>Results of Testing on pml-testing Data</h2>
-<p>After finding the random forrest to be the most accurate of the three methods, we apply this to the final sample of 20 observertions and make predictionst to be submittied to Coursera. We apply the same column selection to that the original training data to ensure the fitting model used in the later analysis throw no errors due to missing values:</p>
+<p>After finding the random forest to be the most accurate of the three methods, we apply this to the final sample of 20 observertions and make predictions to be submittied to Coursera. We apply the same column selection to that the original training data to ensure the fitting model used in the later analysis throw no errors due to missing values:</p>
 <pre class="r"><code>T20 = read.csv(&quot;pml-testing.csv&quot;, na.strings=c(&quot;NA&quot;,&quot;#DIV/0!&quot;,&quot;&quot;))
 T20 &lt;- T20[-c(1:6)]
 T20 &lt;- T20[c(154,1:153)]
 T20 &lt;- T20[,(na_count==0)]</code></pre>
 <p>Now the predicitons:</p>
-<pre class="r"><code>rfTpred&lt;-predict(rfFit,T20)</code></pre>
+<pre class="r"><code>rfTpred&lt;-predict(rfFit,T20)
+predict(rfFit,T20)</code></pre>
+<pre><code>##  [1] B A B A A E D B A A B C B A E E A B B B
+## Levels: A B C D E</code></pre>
 <p>To submit the final predictions of the sample of 20, we use the code provided:</p>
 <pre class="r"><code>pml_write_files = function(x){
   n = length(x)
@@ -408,11 +377,13 @@ T20 &lt;- T20[,(na_count==0)]</code></pre>
 }
 
 pml_write_files(rfTpred)</code></pre>
+<p>We found our results to be 100% correct.</p>
+<pre class="r"><code>stopCluster(cl)</code></pre>
 </div>
 <div id="conclusions" class="section level2">
 <h2>Conclusions</h2>
 <p>We have built a training model to using data from the Weight Lifting Exercise Dataset, which gathered data from data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.</p>
-<p>We split the data set into training (60%) and testing (40%) samples and trained the data on three different machine leanring algorithms, random forrest <code>rf</code>, generalised boosted regresssion models <code>gbm</code> and support vector machines with radial basis function kernel <code>svmRadial</code>. We found the random forrest to perform the best and applied this to the final test data of 20 samples and found that it performed well, finding 100% correct classifcation. This is perhaps not too surpriseing since the training model was shown to have ~99.7% accuracy. Since this data is trained to only 6 participants, it possibly is not representative of a broader range of the population e.g. younger vs older, fitness level etc…</p>
+<p>We split the data set into training (60%) and testing (40%) samples and trained the data on three different machine leanring algorithms, random forest <code>rf</code>, generalised boosted regresssion models <code>gbm</code> and support vector machines with radial basis function kernel <code>svmRadial</code>. We found the random forest to perform the best and applied this to the final test data of 20 samples and found that it performed well, finding 100% correct classifcation. This is perhaps not too surpriseing since the training model was shown to have ~99.7% accuracy. Since this data is trained to only 6 participants, it possibly is not representative of a broader range of the population e.g. younger vs older, fitness level etc…</p>
 </div>
 
 
